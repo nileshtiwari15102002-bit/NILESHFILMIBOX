@@ -1,0 +1,1033 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Nilesh Filmi Box - Premium Streaming</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        body { font-family: 'Inter', sans-serif; background-color: #020617; color: #f1f5f9; }
+        .scrollbar-hide::-webkit-scrollbar { display: none; }
+        .scrollbar-hide { -ms-overflow-style: none; scrollbar-width: none; }
+        #canvas-container canvas { touch-action: none; cursor: crosshair; }
+        .toast-enter { animation: slideIn 0.3s ease-out forwards; }
+        .toast-exit { animation: slideOut 0.3s ease-in forwards; }
+        @keyframes slideIn { from { transform: translateY(100%); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
+        @keyframes slideOut { from { transform: translateY(0); opacity: 1; } to { transform: translateY(100%); opacity: 0; } }
+    </style>
+</head>
+<body class="selection:bg-red-500/30 min-h-screen flex flex-col">
+
+    <nav class="sticky top-0 z-50 bg-slate-900/80 backdrop-blur-md border-b border-slate-800 px-4 py-3 flex items-center justify-between">
+        <div class="flex items-center gap-2 cursor-pointer" onclick="navigate('home')">
+            <div class="bg-red-600 p-1.5 rounded-lg">
+                <i class="fa-solid fa-play text-white"></i>
+            </div>
+            <span class="text-xl font-black tracking-tight text-white hidden sm:block">
+                NILESH FILMI <span class="text-red-500">BOX</span>
+            </span>
+        </div>
+
+        <div class="flex-1 max-w-xl px-4 hidden md:block">
+            <div class="relative">
+                <i class="fa-solid fa-search absolute left-3 top-1/2 -translate-y-1/2 text-slate-400"></i>
+                <input type="text" id="searchInput" placeholder="Search movies, anime, cartoons..." class="w-full bg-slate-950 border border-slate-800 rounded-full py-2 pl-10 pr-4 text-sm focus:outline-none focus:border-red-500 focus:ring-1 focus:ring-red-500 transition-all" onkeyup="handleSearch()">
+            </div>
+        </div>
+
+        <div class="flex items-center gap-2 sm:gap-4" id="nav-actions">
+            <!-- Nav actions injected via JS -->
+        </div>
+    </nav>
+
+    <main id="app-content" class="pb-20 flex-1">
+        <!-- Dynamic Content Injected Here -->
+    </main>
+
+    <!-- Modal for Profile Setup -->
+    <div id="profile-modal" class="fixed inset-0 bg-slate-950/80 backdrop-blur-sm z-[100] hidden items-center justify-center p-4">
+        <div class="bg-slate-900 border border-slate-800 p-6 rounded-2xl max-w-md w-full shadow-2xl">
+            <h2 class="text-2xl font-bold mb-2 text-white">Welcome to Nilesh Filmi Box</h2>
+            <p class="text-slate-400 text-sm mb-6">Please enter your display name to continue. (Owner must use exact name to gain Admin access).</p>
+            <input type="text" id="tempNameInput" placeholder="e.g. Nilesh Rajesh Tiwari" class="w-full bg-slate-950 border border-slate-800 rounded-lg p-3 text-white focus:outline-none focus:border-red-500 mb-4">
+            <button onclick="saveProfile()" id="saveProfileBtn" class="w-full bg-red-600 hover:bg-red-700 text-white font-bold py-3 rounded-lg transition-colors disabled:opacity-50">Enter Platform</button>
+            
+            <div id="google-login-section">
+                <div class="flex items-center gap-4 my-4">
+                    <div class="h-px bg-slate-800 flex-1"></div>
+                    <span class="text-xs text-slate-500 font-medium">OR</span>
+                    <div class="h-px bg-slate-800 flex-1"></div>
+                </div>
+                <button onclick="handleGoogleLogin()" class="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 rounded-lg transition-colors flex items-center justify-center gap-2 shadow-lg shadow-blue-600/20">
+                    <i class="fa-brands fa-google"></i> Login with Google
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Confirm Modal -->
+    <div id="confirm-modal" class="fixed inset-0 bg-slate-950/80 backdrop-blur-sm z-[110] hidden items-center justify-center p-4">
+        <div class="bg-slate-900 border border-slate-800 p-6 rounded-xl max-w-sm w-full text-center">
+            <i class="fa-solid fa-triangle-exclamation text-4xl text-red-500 mb-4"></i>
+            <h3 class="text-lg font-bold text-white mb-2" id="confirm-title">Are you sure?</h3>
+            <p class="text-slate-400 text-sm mb-6" id="confirm-msg">This action cannot be undone.</p>
+            <div class="flex gap-3">
+                <button onclick="closeConfirm()" class="flex-1 bg-slate-800 hover:bg-slate-700 text-white py-2 rounded-lg font-medium transition-colors">Cancel</button>
+                <button id="confirm-action-btn" class="flex-1 bg-red-600 hover:bg-red-700 text-white py-2 rounded-lg font-medium transition-colors">Confirm</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Toast Container -->
+    <div id="toast-container" class="fixed bottom-4 left-1/2 -translate-x-1/2 z-[120] flex flex-col gap-2 pointer-events-none"></div>
+
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
+        import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged, GoogleAuthProvider, signInWithPopup } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js";
+        import { getFirestore, collection, doc, setDoc, getDocs, onSnapshot, addDoc, updateDoc, deleteDoc, increment } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
+
+        // =====================================================================
+        // 🔥 YAHAN APNA REAL FIREBASE CONFIG DAALEIN (VERY IMPORTANT) 🔥
+        // Jab tak aap yahan real details nahi daalenge, website 'Local Mode' 
+        // me chalegi aur videos sirf aapko dikhengi!
+        // =====================================================================
+        const myFirebaseConfig = {
+            apiKey: "YOUR_API_KEY",
+            authDomain: "YOUR_PROJECT_ID.firebaseapp.com",
+            projectId: "YOUR_PROJECT_ID",
+            storageBucket: "YOUR_PROJECT_ID.appspot.com",
+            messagingSenderId: "YOUR_SENDER_ID",
+            appId: "YOUR_APP_ID"
+        };
+
+        // Check if running locally or in preview
+        const isImmersive = typeof window.__firebase_config !== 'undefined';
+        const isLocalMode = !isImmersive && myFirebaseConfig.apiKey === "YOUR_API_KEY";
+        const firebaseConfig = isImmersive ? JSON.parse(window.__firebase_config) : (isLocalMode ? { apiKey: "demo-key", projectId: "demo-project", appId: "demo-app" } : myFirebaseConfig);
+        
+        const app = initializeApp(firebaseConfig);
+        const auth = getAuth(app);
+        const db = getFirestore(app);
+        const appId = typeof window.__app_id !== 'undefined' ? window.__app_id : 'nilesh-filmi-box';
+        const ADMIN_NAME = "Nilesh Rajesh Tiwari";
+        const CATEGORIES = ['Movies', 'Anime', '3D Cartoons', 'Animal Stories', 'Horror'];
+
+        // Clean Professional State (No Demo Data)
+        const INITIAL_VIDEOS = [];
+
+        // Global State
+        let state = {
+            user: null,
+            userData: null,
+            videos: INITIAL_VIDEOS,
+            currentVideo: null,
+            platformData: { totalRevenue: 0, availableBalance: 0 },
+            view: 'home', 
+            searchQuery: '',
+            creatorTab: 'upload',
+            adminTab: 'overview',
+            isSubscribed: false,
+            creatorSubs: 0,
+            dataListenersInitialized: false
+        };
+
+        window.showToast = function(message, type = 'success') {
+            const container = document.getElementById('toast-container');
+            const toast = document.createElement('div');
+            const color = type === 'success' ? 'bg-green-600' : type === 'error' ? 'bg-red-600' : 'bg-slate-800';
+            toast.className = `${color} text-white px-4 py-2 rounded-full shadow-lg text-sm font-medium toast-enter flex items-center gap-2`;
+            toast.innerHTML = `<i class="fa-solid ${type === 'success' ? 'fa-check-circle' : type === 'error' ? 'fa-circle-xmark' : 'fa-info-circle'}"></i> ${message}`;
+            container.appendChild(toast);
+            setTimeout(() => {
+                toast.classList.replace('toast-enter', 'toast-exit');
+                setTimeout(() => toast.remove(), 300);
+            }, 3000);
+        };
+
+        window.showConfirm = function(title, msg, onConfirm) {
+            document.getElementById('confirm-title').innerText = title;
+            document.getElementById('confirm-msg').innerText = msg;
+            document.getElementById('confirm-modal').classList.remove('hidden');
+            document.getElementById('confirm-modal').classList.add('flex');
+            const btn = document.getElementById('confirm-action-btn');
+            btn.onclick = () => { onConfirm(); closeConfirm(); };
+        };
+
+        window.closeConfirm = function() {
+            document.getElementById('confirm-modal').classList.add('hidden');
+            document.getElementById('confirm-modal').classList.remove('flex');
+        };
+
+        const initAuth = async () => {
+            try {
+                if (typeof window.__initial_auth_token !== 'undefined' && window.__initial_auth_token) {
+                    await signInWithCustomToken(auth, window.__initial_auth_token);
+                } else {
+                    await signInAnonymously(auth);
+                }
+            } catch (err) {
+                console.error("Auth error:", err);
+            }
+        };
+
+        onAuthStateChanged(auth, (currentUser) => {
+            if (!currentUser && isLocalMode) {
+                // Enable Offline / Local HTML Demo Mode when downloaded
+                state.user = { uid: 'local-admin-123', isAnonymous: false };
+                state.userData = { name: ADMIN_NAME, isAdmin: true, wallet: 0, totalViews: 0, photoURL: null };
+                state.platformData = { totalRevenue: 0, availableBalance: 0 };
+                state.dataListenersInitialized = true;
+                renderNavbar();
+                render();
+                setTimeout(() => showToast("Running in Local Mode. Add Firebase keys to publish globally!", "info"), 2000);
+                return;
+            }
+
+            state.user = currentUser;
+            if (currentUser) {
+                if (!state.dataListenersInitialized) {
+                    initDataListeners();
+                    state.dataListenersInitialized = true;
+                }
+                checkUserProfile(currentUser);
+            } else {
+                render();
+            }
+        });
+
+        const checkUserProfile = async (currentUser) => {
+            const profileRef = doc(db, 'artifacts', appId, 'public', 'data', 'profiles', currentUser.uid);
+            onSnapshot(profileRef, async (docSnap) => {
+                if (docSnap.exists()) {
+                    state.userData = docSnap.data();
+                    document.getElementById('profile-modal').classList.add('hidden');
+                    document.getElementById('profile-modal').classList.remove('flex');
+                } else {
+                    if (currentUser.displayName) {
+                        await setDoc(profileRef, {
+                            name: currentUser.displayName,
+                            isAdmin: currentUser.displayName === ADMIN_NAME,
+                            createdAt: new Date().toISOString(),
+                            wallet: 0,
+                            totalViews: 0,
+                            photoURL: currentUser.photoURL || null
+                        });
+                    } else {
+                        document.getElementById('profile-modal').classList.remove('hidden');
+                        document.getElementById('profile-modal').classList.add('flex');
+                        document.getElementById('google-login-section').style.display = currentUser.isAnonymous ? 'block' : 'none';
+                    }
+                }
+                renderNavbar();
+                render();
+            });
+        };
+
+        window.saveProfile = async () => {
+            const tempName = document.getElementById('tempNameInput').value;
+            if (!state.user || !tempName.trim()) return;
+            const profileRef = doc(db, 'artifacts', appId, 'public', 'data', 'profiles', state.user.uid);
+            await setDoc(profileRef, {
+                name: tempName,
+                isAdmin: tempName === ADMIN_NAME,
+                createdAt: new Date().toISOString(),
+                wallet: 0,
+                totalViews: 0
+            });
+        };
+
+        window.handleGoogleLogin = async () => {
+            try {
+                const provider = new GoogleAuthProvider();
+                await signInWithPopup(auth, provider);
+            } catch (err) {
+                showToast("Google Login failed.", "error");
+            }
+        };
+
+        const initDataListeners = () => {
+            const videosRef = collection(db, 'artifacts', appId, 'public', 'data', 'videos');
+            onSnapshot(videosRef, (snapshot) => {
+                let fetched = [];
+                snapshot.forEach(doc => fetched.push({ id: doc.id, ...doc.data() }));
+                // Sort by newest
+                fetched.sort((a,b) => new Date(b.createdAt) - new Date(a.createdAt));
+                state.videos = fetched.length === 0 ? INITIAL_VIDEOS : fetched;
+                
+                if(state.view !== 'player') render(); 
+            });
+
+            const platformRef = doc(db, 'artifacts', appId, 'public', 'data', 'platformStats', 'revenue');
+            onSnapshot(platformRef, (docSnap) => {
+                if (docSnap.exists()) state.platformData = docSnap.data();
+                else setDoc(platformRef, { totalRevenue: 0, availableBalance: 0 });
+                if(state.view === 'admin') render();
+            });
+        };
+
+        window.navigate = (view) => {
+            state.view = view;
+            try {
+                window.history.pushState({}, '', window.location.pathname); 
+            } catch (e) {
+                // Ignore history block in iframe
+            }
+            render();
+        };
+
+        window.handleSearch = () => {
+            state.searchQuery = document.getElementById('searchInput').value;
+            if (state.view !== 'home') navigate('home');
+            else render();
+        };
+
+        const renderNavbar = () => {
+            const actions = document.getElementById('nav-actions');
+            let html = '';
+            
+            html += `<button onclick="navigate('creator')" class="hidden sm:flex items-center gap-2 text-sm font-medium text-slate-300 hover:text-white transition-colors bg-slate-800 hover:bg-slate-700 px-3 py-1.5 rounded-full"><i class="fa-solid fa-upload"></i> Upload</button>`;
+            
+            if (state.userData?.isAdmin) {
+                html += `<button onclick="navigate('admin')" class="flex items-center gap-2 text-sm font-medium text-white bg-red-600 hover:bg-red-700 px-3 py-1.5 rounded-full shadow-lg shadow-red-600/20"><i class="fa-solid fa-gear"></i> Admin</button>`;
+            }
+
+            if (state.user?.isAnonymous) {
+                html += `<button onclick="handleGoogleLogin()" class="flex items-center gap-2 text-sm font-bold text-white bg-blue-600 hover:bg-blue-700 px-4 py-1.5 rounded-full shadow-lg shadow-blue-600/20 ml-2"><i class="fa-brands fa-google"></i> <span class="hidden sm:block">Login</span></button>`;
+            } else if (state.userData) {
+                if (state.userData.photoURL) {
+                    html += `<img src="${state.userData.photoURL}" alt="User" class="w-8 h-8 rounded-full border border-slate-700 object-cover ml-2">`;
+                } else {
+                    html += `<div class="w-8 h-8 bg-slate-800 rounded-full flex items-center justify-center border border-slate-700 text-sm font-bold text-slate-300 ml-2">${state.userData.name ? state.userData.name.charAt(0).toUpperCase() : '<i class="fa-solid fa-user"></i>'}</div>`;
+                }
+            }
+            actions.innerHTML = html;
+        };
+
+        const render = () => {
+            const container = document.getElementById('app-content');
+            window.scrollTo(0, 0);
+            if (state.view === 'home') container.innerHTML = getHomeHTML();
+            else if (state.view === 'player') container.innerHTML = getPlayerHTML();
+            else if (state.view === 'creator') container.innerHTML = getCreatorHTML();
+            else if (state.view === 'admin') container.innerHTML = getAdminHTML();
+            
+            if (state.view === 'creator' && state.creatorTab === 'canvas') initCanvas();
+        };
+
+        const getHomeHTML = () => {
+            const filtered = state.videos.filter(v => 
+                v.title.toLowerCase().includes(state.searchQuery.toLowerCase()) ||
+                v.category.toLowerCase().includes(state.searchQuery.toLowerCase())
+            );
+
+            let html = `<div class="p-4 sm:p-6 lg:p-8 max-w-7xl mx-auto">`;
+            
+            if (!state.searchQuery && filtered.length > 0) {
+                const feat = filtered[0];
+                html += `
+                <div class="relative w-full h-[40vh] min-h-[300px] rounded-2xl overflow-hidden mb-8 group cursor-pointer" onclick='playVideoObj(${JSON.stringify(feat).replace(/'/g, "&#39;")})'>
+                    <img src="${feat.thumbnail}" alt="Featured" class="w-full h-full object-cover transition-transform duration-700 group-hover:scale-105">
+                    <div class="absolute inset-0 bg-gradient-to-t from-slate-950 via-slate-900/60 to-transparent flex flex-col justify-end p-6 sm:p-10">
+                        <span class="bg-red-600 text-white text-xs font-bold px-2 py-1 rounded w-fit mb-3">FEATURED</span>
+                        <h1 class="text-3xl sm:text-5xl font-black text-white mb-2">${feat.title}</h1>
+                        <p class="text-slate-300 max-w-2xl text-sm sm:text-base hidden sm:block">${feat.description || 'Watch the best premium content.'}</p>
+                    </div>
+                </div>`;
+            }
+
+            html += `<div class="flex gap-3 overflow-x-auto pb-4 mb-6 scrollbar-hide">`;
+            ['All', ...CATEGORIES].forEach(cat => {
+                html += `<button onclick="document.getElementById('searchInput').value='${cat === 'All' ? '' : cat}'; handleSearch()" class="whitespace-nowrap px-4 py-2 bg-slate-900 border border-slate-800 rounded-full text-sm font-medium text-slate-300 hover:bg-red-600 hover:text-white hover:border-red-600 transition-all">${cat}</button>`;
+            });
+            html += `</div>`;
+
+            if (filtered.length === 0) {
+                html += `<div class="col-span-full py-20 flex flex-col items-center justify-center text-slate-500">
+                    <i class="fa-solid fa-film text-5xl mb-4 opacity-50"></i>
+                    <p class="text-lg font-medium">No videos available yet</p>
+                    <p class="text-sm">Be the first one to upload!</p>
+                </div>`;
+            }
+
+            html += `<div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6">`;
+            filtered.forEach(v => {
+                html += `
+                <div class="group cursor-pointer flex flex-col gap-2" onclick='playVideoObj(${JSON.stringify(v).replace(/'/g, "&#39;")})'>
+                    <div class="relative aspect-video rounded-xl overflow-hidden bg-slate-900">
+                        <img src="${v.thumbnail}" class="w-full h-full object-cover group-hover:opacity-80 transition-opacity">
+                        <div class="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+                            <i class="fa-solid fa-play text-white text-4xl"></i>
+                        </div>
+                    </div>
+                    <div class="flex gap-3 items-start">
+                        <div class="w-9 h-9 rounded-full bg-slate-800 flex-shrink-0 flex items-center justify-center mt-1"><i class="fa-solid fa-user text-slate-400"></i></div>
+                        <div class="flex flex-col overflow-hidden">
+                            <h3 class="font-semibold text-slate-100 truncate group-hover:text-red-400 transition-colors">${v.title}</h3>
+                            <p class="text-xs text-slate-400 truncate">${v.creator}</p>
+                            <div class="text-xs text-slate-500 flex items-center gap-1 mt-0.5">
+                                <span>${(v.views/1000).toFixed(1)}K views</span> <span>•</span> <span>${v.category}</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>`;
+            });
+            html += `</div></div>`;
+            return html;
+        };
+
+        window.playVideoObj = async (v) => {
+            state.currentVideo = v;
+            state.view = 'player';
+            render();
+
+            const adOverlay = document.getElementById('ad-overlay');
+            const mainVideo = document.getElementById('main-video');
+            const adTimer = document.getElementById('ad-timer');
+
+            if (adOverlay && mainVideo && adTimer) {
+                adOverlay.classList.remove('hidden');
+                adOverlay.classList.add('flex');
+                mainVideo.pause(); 
+                
+                let timeLeft = 4; // 4 seconds Ad Overlay
+                adTimer.innerText = `Video plays in ${timeLeft}s`;
+                
+                const adCountdown = setInterval(() => {
+                    timeLeft--;
+                    if (timeLeft > 0) {
+                        adTimer.innerText = `Video plays in ${timeLeft}s`;
+                    } else {
+                        clearInterval(adCountdown);
+                        adOverlay.classList.add('hidden');
+                        adOverlay.classList.remove('flex');
+                        mainVideo.play().catch(e=>console.warn("Auto-play blocked", e));
+                    }
+                }, 1000);
+            }
+
+            // --- REVENUE GENERATION LOGIC ---
+            const REVENUE = 10; 
+            
+            if (isLocalMode) {
+                if (v.creator === ADMIN_NAME) {
+                     state.platformData.totalRevenue += REVENUE;
+                     state.platformData.availableBalance += REVENUE;
+                     showToast(`Google Ad Played! ₹${REVENUE} (100%) added to Admin Balance.`, "success");
+                } else {
+                     state.platformData.totalRevenue += (REVENUE * 0.5);
+                     state.platformData.availableBalance += (REVENUE * 0.5);
+                     showToast(`Ad Played! 50% to Creator, 50% (₹${REVENUE * 0.5}) to Admin Balance!`, "success");
+                }
+            } else {
+                if (v.id) {
+                    const videoRef = doc(db, 'artifacts', appId, 'public', 'data', 'videos', v.id);
+                    updateDoc(videoRef, { views: increment(1) }).catch(()=>{});
+                    
+                    const platformRef = doc(db, 'artifacts', appId, 'public', 'data', 'platformStats', 'revenue');
+                    
+                    if (v.creator === ADMIN_NAME) {
+                        // 100% to Admin Platform
+                        showToast(`Google Ad Played! ₹${REVENUE} (100%) added to Platform Balance.`, "success");
+                        updateDoc(platformRef, { totalRevenue: increment(REVENUE), availableBalance: increment(REVENUE) }).catch(()=>{});
+                    } else if (v.creatorId) {
+                        // 50% Creator / 50% Admin Split
+                        showToast(`Ad Played! 50% to ${v.creator}, 50% to Platform Balance!`, "success");
+                        const creatorRef = doc(db, 'artifacts', appId, 'public', 'data', 'profiles', v.creatorId);
+                        
+                        updateDoc(creatorRef, { wallet: increment(REVENUE * 0.5), totalViews: increment(1) }).catch(()=>{});
+                        updateDoc(platformRef, { totalRevenue: increment(REVENUE * 0.5), availableBalance: increment(REVENUE * 0.5) }).catch(()=>{});
+                    }
+                }
+            }
+            setupPlayerListeners();
+        };
+
+        const setupPlayerListeners = () => {
+            if(!state.currentVideo || !state.currentVideo.creatorId || isLocalMode) return;
+            const creatorRef = doc(db, 'artifacts', appId, 'public', 'data', 'profiles', state.currentVideo.creatorId);
+            onSnapshot(creatorRef, (snap) => {
+                if(snap.exists()) {
+                    state.creatorSubs = snap.data().subscribersCount || 0;
+                    const el = document.getElementById('sub-count-display');
+                    if(el) el.innerText = `${state.creatorSubs} Subscribers`;
+                }
+            });
+
+            if(state.user) {
+                const subRef = doc(db, 'artifacts', appId, 'users', state.user.uid, 'subscriptions', state.currentVideo.creatorId);
+                onSnapshot(subRef, (snap) => {
+                    state.isSubscribed = snap.exists();
+                    const btn = document.getElementById('sub-btn');
+                    if(btn) {
+                        btn.innerText = state.isSubscribed ? 'Subscribed' : 'Subscribe';
+                        btn.className = state.isSubscribed 
+                            ? 'ml-4 font-bold px-4 py-2 rounded-full text-sm transition-colors bg-slate-800 text-slate-300 hover:bg-slate-700' 
+                            : 'ml-4 font-bold px-4 py-2 rounded-full text-sm transition-colors bg-white text-black hover:bg-slate-200';
+                    }
+                });
+            }
+        };
+
+        window.toggleSubscribe = async () => {
+            const v = state.currentVideo;
+            if (!state.user || !v.creatorId || state.user.uid === v.creatorId || isLocalMode) return;
+            
+            const subRef = doc(db, 'artifacts', appId, 'users', state.user.uid, 'subscriptions', v.creatorId);
+            const creatorRef = doc(db, 'artifacts', appId, 'public', 'data', 'profiles', v.creatorId);
+            const platformRef = doc(db, 'artifacts', appId, 'public', 'data', 'platformStats', 'revenue');
+
+            if (state.isSubscribed) {
+                await deleteDoc(subRef);
+                await updateDoc(creatorRef, { subscribersCount: increment(-1) });
+                showToast("Unsubscribed", "success");
+            } else {
+                await setDoc(subRef, { subscribedAt: new Date().toISOString() });
+                await updateDoc(creatorRef, { subscribersCount: increment(1) });
+                showToast("Subscribed! ₹10 generated.", "success");
+
+                const REV = 10; 
+                if (v.creator === ADMIN_NAME) {
+                    await updateDoc(platformRef, { totalRevenue: increment(REV), availableBalance: increment(REV) });
+                } else {
+                    await updateDoc(creatorRef, { wallet: increment(REV * 0.5) });
+                    await updateDoc(platformRef, { totalRevenue: increment(REV * 0.5), availableBalance: increment(REV * 0.5) });
+                }
+            }
+        };
+
+        window.handleShare = () => {
+            const shareUrl = `${window.location.href.split('?')[0]}?v=${state.currentVideo.id}`;
+            const ta = document.createElement('textarea');
+            ta.value = shareUrl;
+            document.body.appendChild(ta);
+            ta.select();
+            try {
+                document.execCommand('copy');
+                showToast("Link Copied Successfully!");
+            } catch(e) {
+                showToast("Error Copying Link", "error");
+            }
+            document.body.removeChild(ta);
+        };
+
+        window.handleDownload = async () => {
+            const v = state.currentVideo;
+            showToast("Starting download... Revenue generated!", "success");
+            
+            if (v.id && !isLocalMode) {
+                const videoRef = doc(db, 'artifacts', appId, 'public', 'data', 'videos', v.id);
+                updateDoc(videoRef, { downloads: increment(1) }).catch(()=>{});
+
+                const REV = 5;
+                const platformRef = doc(db, 'artifacts', appId, 'public', 'data', 'platformStats', 'revenue');
+
+                if (v.creator === ADMIN_NAME) {
+                    await updateDoc(platformRef, { totalRevenue: increment(REV), availableBalance: increment(REV) });
+                } else if (v.creatorId) {
+                    const creatorRef = doc(db, 'artifacts', appId, 'public', 'data', 'profiles', v.creatorId);
+                    await updateDoc(creatorRef, { wallet: increment(REV * 0.5) }).catch(()=>{});
+                    await updateDoc(platformRef, { totalRevenue: increment(REV * 0.5), availableBalance: increment(REV * 0.5) }).catch(()=>{});
+                }
+            }
+
+            try {
+                const a = document.createElement('a');
+                a.href = v.url;
+                a.download = `${v.title.replace(/[^a-zA-Z0-9]/g, '_')}.mp4`;
+                a.target = '_blank';
+                a.click();
+            } catch (e) {
+                showToast("Download opened in new tab", "info");
+            }
+        };
+
+        const getPlayerHTML = () => {
+            const v = state.currentVideo;
+            if(!v) return '';
+            
+            const isOwn = state.user?.uid === v.creatorId;
+            const disabledSub = !v.creatorId || isOwn ? 'disabled opacity-50 cursor-not-allowed' : '';
+
+            let html = `
+            <div class="max-w-[1600px] mx-auto p-4 lg:p-6 grid grid-cols-1 lg:grid-cols-3 gap-8">
+                <div class="lg:col-span-2 flex flex-col gap-4">
+                    <div class="relative w-full aspect-video bg-black rounded-xl overflow-hidden shadow-2xl border border-slate-800 group">
+                        
+                        <!-- Simulated Google Ad Overlay -->
+                        <div id="ad-overlay" class="absolute inset-0 z-20 hidden flex-col bg-black">
+                            <div class="absolute top-4 left-4 bg-yellow-500 text-black text-xs font-black px-2 py-1 rounded uppercase tracking-wider shadow-lg">Ad</div>
+                            <div class="absolute top-4 right-4 text-white text-sm font-medium bg-black/60 px-4 py-1.5 rounded-full backdrop-blur border border-white/10 shadow-lg" id="ad-timer">Video will play after ad... 4s</div>
+                            <img src="https://images.unsplash.com/photo-1611162617474-5b21e879e113?w=1000&q=80" class="w-full h-full object-cover opacity-60">
+                            <div class="absolute bottom-6 left-6 right-6 flex flex-col sm:flex-row sm:justify-between sm:items-end gap-4">
+                                <div>
+                                    <h2 class="text-2xl sm:text-4xl font-black text-white mb-2 drop-shadow-lg">Premium Cloud Hosting</h2>
+                                    <p class="text-slate-200 drop-shadow max-w-md hidden sm:block">Get 50% off on high-speed servers. Limited time offer!</p>
+                                </div>
+                                <button class="bg-blue-600 hover:bg-blue-700 text-white px-8 py-3 rounded-lg font-bold shadow-xl shadow-blue-600/30 flex-shrink-0 transition-colors">Visit Site <i class="fa-solid fa-external-link-alt ml-2"></i></button>
+                            </div>
+                        </div>
+                        
+                        <video id="main-video" src="${v.url}" poster="${v.thumbnail}" class="w-full h-full" controls playsinline></video>
+                    </div>
+                    
+                    <div class="flex flex-col gap-4">
+                        <h1 class="text-2xl sm:text-3xl font-bold text-white">${v.title}</h1>
+                        <div class="flex flex-wrap items-center justify-between gap-4 border-b border-slate-800 pb-4">
+                            <div class="flex items-center gap-3">
+                                <div class="w-12 h-12 rounded-full bg-slate-800 flex items-center justify-center"><i class="fa-solid fa-user text-slate-400 text-xl"></i></div>
+                                <div>
+                                    <h3 class="font-bold text-slate-200">${v.creator}</h3>
+                                    <p class="text-xs text-slate-400" id="sub-count-display">${state.creatorSubs} Subscribers</p>
+                                </div>
+                                <button id="sub-btn" onclick="toggleSubscribe()" class="ml-4 font-bold px-4 py-2 rounded-full text-sm transition-colors bg-white text-black hover:bg-slate-200 ${disabledSub}">Subscribe</button>
+                            </div>
+                            
+                            <div class="flex items-center gap-2">
+                                <button onclick="handleShare()" class="flex items-center gap-2 px-4 py-2 bg-slate-900 border border-slate-800 rounded-full hover:bg-slate-800 transition-colors"><i class="fa-solid fa-share"></i> Share</button>
+                                <button onclick="handleDownload()" class="flex items-center gap-2 px-4 py-2 bg-slate-900 border border-slate-800 rounded-full hover:bg-slate-800 transition-colors"><i class="fa-solid fa-download"></i> Download</button>
+                            </div>
+                        </div>
+                        <div class="bg-slate-900 border border-slate-800 p-4 rounded-xl text-sm text-slate-300">
+                            <p class="font-semibold text-slate-200 mb-2">${(v.views||0).toLocaleString()} views • ${v.category}</p>
+                            <p>${v.description || 'No description provided.'}</p>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="flex flex-col gap-4">
+                    <h3 class="font-bold text-lg mb-2">Up Next</h3>
+                    <div class="flex flex-col gap-4">`;
+            
+            state.videos.filter(vid => vid.id !== v.id).forEach(vid => {
+                html += `
+                <div class="flex gap-3 group cursor-pointer" onclick='playVideoObj(${JSON.stringify(vid).replace(/'/g, "&#39;")})'>
+                    <div class="w-40 relative aspect-video rounded-lg overflow-hidden bg-slate-900 flex-shrink-0">
+                        <img src="${vid.thumbnail}" class="w-full h-full object-cover group-hover:opacity-80">
+                    </div>
+                    <div class="flex flex-col overflow-hidden">
+                        <h4 class="font-semibold text-sm text-slate-200 line-clamp-2">${vid.title}</h4>
+                        <p class="text-xs text-slate-400 mt-1">${vid.creator}</p>
+                        <p class="text-xs text-slate-500 mt-0.5">${(vid.views/1000).toFixed(1)}K views</p>
+                    </div>
+                </div>`;
+            });
+            
+            html += `</div></div></div>`;
+            return html;
+        };
+
+        window.setCreatorTab = (tab) => { state.creatorTab = tab; render(); };
+        
+        const getCreatorHTML = () => {
+            const activeTab = state.creatorTab;
+            let html = `
+            <div class="max-w-6xl mx-auto p-4 sm:p-6 lg:p-8">
+                <div class="flex flex-col sm:flex-row items-start sm:items-center justify-between mb-8 gap-4">
+                    <div><h1 class="text-3xl font-bold text-white">Creator Studio</h1><p class="text-slate-400 mt-1">Manage your content and earnings.</p></div>
+                    <div class="flex flex-wrap bg-slate-900 rounded-lg p-1 border border-slate-800 gap-1 sm:gap-0">
+                        <button onclick="setCreatorTab('upload')" class="px-4 py-2 rounded-md text-sm font-medium transition-colors ${activeTab==='upload'?'bg-red-600 text-white':'text-slate-400'}">Upload</button>
+                        <button onclick="setCreatorTab('canvas')" class="px-4 py-2 rounded-md text-sm font-medium transition-colors flex items-center gap-1 ${activeTab==='canvas'?'bg-red-600 text-white':'text-slate-400'}"><i class="fa-solid fa-palette"></i> Canvas</button>
+                        <button onclick="setCreatorTab('content')" class="px-4 py-2 rounded-md text-sm font-medium transition-colors ${activeTab==='content'?'bg-red-600 text-white':'text-slate-400'}">My Videos</button>
+                        <button onclick="setCreatorTab('analytics')" class="px-4 py-2 rounded-md text-sm font-medium transition-colors ${activeTab==='analytics'?'bg-red-600 text-white':'text-slate-400'}">Analytics</button>
+                        <button onclick="setCreatorTab('wallet')" class="px-4 py-2 rounded-md text-sm font-medium transition-colors ${activeTab==='wallet'?'bg-red-600 text-white':'text-slate-400'}">Wallet</button>
+                    </div>
+                </div>`;
+
+            if (activeTab === 'upload') {
+                html += `
+                <div class="grid grid-cols-1 lg:grid-cols-2 gap-8">
+                    <div class="bg-slate-900 border border-slate-800 rounded-2xl p-6 shadow-xl">
+                        <h2 class="text-xl font-bold mb-6 flex items-center gap-2"><i class="fa-solid fa-video text-red-500"></i> Upload New Content</h2>
+                        <div class="space-y-4">
+                            <div>
+                                <label class="block text-sm font-medium text-slate-400 mb-1">Select Video File</label>
+                                <div class="relative border-2 border-dashed border-slate-700 rounded-lg p-6 hover:border-red-500 transition-colors bg-slate-950 flex flex-col items-center justify-center cursor-pointer group">
+                                    <input type="file" accept="video/*" onchange="handleFileSelect(event)" class="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-10">
+                                    <i class="fa-solid fa-cloud-arrow-up text-3xl text-slate-500 mb-2"></i>
+                                    <p class="text-sm text-slate-300 font-medium">Click or drag video to upload</p>
+                                </div>
+                            </div>
+                            <div>
+                                <label class="block text-sm font-medium text-slate-400 mb-1">External Video URL (Optional)</label>
+                                <input type="text" id="up-url" class="w-full bg-slate-950 border border-slate-800 rounded-lg p-3 text-white focus:border-red-500" placeholder="https://...">
+                            </div>
+                            <div>
+                                <label class="block text-sm font-medium text-slate-400 mb-1 flex justify-between">Thumbnail <button onclick="setCreatorTab('canvas')" class="text-red-400 text-xs hover:underline"><i class="fa-solid fa-palette"></i> Draw Custom</button></label>
+                                <img id="up-thumb-preview" src="${state.tempThumb || 'https://images.unsplash.com/photo-1616530940355-351fabd9524b?w=800&q=80'}" class="w-full h-40 object-cover rounded-lg border border-slate-800">
+                            </div>
+                            <div>
+                                <label class="block text-sm font-medium text-slate-400 mb-1">Category</label>
+                                <select id="up-cat" class="w-full bg-slate-950 border border-slate-800 rounded-lg p-3 text-white focus:border-red-500">
+                                    ${CATEGORIES.map(c => `<option value="${c}">${c}</option>`).join('')}
+                                </select>
+                            </div>
+                            <div>
+                                <label class="block text-sm font-medium text-slate-400 mb-1">Custom URL Slug</label>
+                                <input type="text" id="up-slug" onkeyup="document.getElementById('slug-preview').innerText = this.value || 'slug'" class="w-full bg-slate-950 border border-slate-800 rounded-lg p-3 text-white focus:border-red-500" placeholder="my-awesome-video">
+                                <p class="text-xs text-slate-500 mt-1">Route: nileshfilmibox.com/watch/<span id="slug-preview" class="text-red-400">slug</span></p>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="bg-slate-900 border border-slate-800 rounded-2xl p-6 shadow-xl flex flex-col">
+                        <div class="space-y-4 flex-1">
+                            <div>
+                                <label class="block text-sm font-medium text-slate-400 mb-1">Title</label>
+                                <input type="text" id="up-title" class="w-full bg-slate-950 border border-slate-800 rounded-lg p-3 text-white focus:border-red-500 font-bold" onkeyup="if(document.getElementById('up-slug').value===''){ const slg = this.value.toLowerCase().replace(/[^a-z0-9]+/g, '-'); document.getElementById('up-slug').value = slg; document.getElementById('slug-preview').innerText = slg;}">
+                            </div>
+                            <div class="flex-1">
+                                <label class="block text-sm font-medium text-slate-400 mb-1">Description</label>
+                                <textarea id="up-desc" class="w-full h-32 bg-slate-950 border border-slate-800 rounded-lg p-3 text-white focus:border-red-500 resize-none text-sm"></textarea>
+                            </div>
+                            <button onclick="publishVideo()" class="w-full bg-red-600 hover:bg-red-700 text-white font-bold py-3 rounded-lg transition-colors flex items-center justify-center gap-2">
+                                <i class="fa-solid fa-upload"></i> Publish Video
+                            </button>
+                        </div>
+                    </div>
+                </div>`;
+            } else if (activeTab === 'canvas') {
+                html += `
+                <div class="bg-slate-900 border border-slate-800 rounded-2xl p-6 shadow-xl flex flex-col gap-6">
+                    <div class="flex justify-between items-center">
+                        <h2 class="text-xl font-bold flex items-center gap-2 text-white"><i class="fa-solid fa-palette text-red-500"></i> Thumbnail Canvas</h2>
+                        <div class="flex items-center gap-3 bg-slate-950 p-2 rounded-xl border border-slate-800">
+                            <button onclick="canvasSetTool('pen')" class="p-2 text-white"><i class="fa-solid fa-pen"></i></button>
+                            <button onclick="canvasSetTool('eraser')" class="p-2 text-slate-400 hover:text-white"><i class="fa-solid fa-eraser"></i></button>
+                            <input type="color" id="canvas-color" value="#ef4444" onchange="canvasSetTool('pen')" class="w-8 h-8 rounded cursor-pointer bg-transparent border-0 p-0">
+                            <input type="range" id="canvas-size" min="1" max="30" value="5" class="w-24 accent-red-500">
+                            <button onclick="canvasClear()" class="p-2 text-slate-400 hover:text-red-400"><i class="fa-solid fa-rotate-left"></i></button>
+                        </div>
+                    </div>
+                    <div id="canvas-container" class="w-full relative aspect-video bg-slate-950 rounded-xl overflow-hidden border-2 border-slate-800 mx-auto max-w-4xl flex items-center justify-center touch-none">
+                        <canvas id="thumbCanvas" width="854" height="480" class="w-full h-full block touch-none"></canvas>
+                    </div>
+                    <div class="flex justify-end gap-3">
+                        <button onclick="setCreatorTab('upload')" class="px-6 py-2.5 bg-slate-800 text-white rounded-lg">Cancel</button>
+                        <button onclick="canvasSave()" class="px-6 py-2.5 bg-red-600 text-white font-bold rounded-lg"><i class="fa-solid fa-image"></i> Use as Thumbnail</button>
+                    </div>
+                </div>`;
+            } else if (activeTab === 'content') {
+                html += `<div class="bg-slate-900 border border-slate-800 rounded-2xl p-6 shadow-xl"><div class="space-y-4">`;
+                const myVids = state.videos.filter(v => v.creatorId === state.user?.uid);
+                if(myVids.length === 0) html += `<p class="text-slate-500 text-center">No videos uploaded yet.</p>`;
+                myVids.forEach(v => {
+                    html += `
+                    <div class="flex gap-4 items-center bg-slate-950 p-4 rounded-xl border border-slate-800">
+                        <img src="${v.thumbnail}" class="w-32 h-20 object-cover rounded-lg flex-shrink-0">
+                        <div class="flex-1 overflow-hidden">
+                            <h3 class="font-bold text-slate-200 truncate">${v.title}</h3>
+                            <p class="text-xs text-slate-500 mt-1">${v.views||0} views • ${v.category}</p>
+                        </div>
+                        <div class="flex gap-2">
+                            <button onclick="deleteVideo('${v.id}')" class="p-2 bg-slate-800 hover:bg-red-600 text-slate-300 rounded-lg"><i class="fa-solid fa-trash"></i></button>
+                        </div>
+                    </div>`;
+                });
+                html += `</div></div>`;
+            } else if (activeTab === 'analytics') {
+                const totalViews = state.userData?.totalViews || 0;
+                const bal = state.userData?.wallet || 0;
+                html += `
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+                    <div class="bg-slate-900 border border-slate-800 rounded-xl p-6 shadow-lg">
+                        <h3 class="text-slate-400 font-medium mb-1 text-sm">Total Views</h3>
+                        <p class="text-4xl font-black text-white">${totalViews.toLocaleString()}</p>
+                    </div>
+                    <div class="bg-slate-900 border border-slate-800 rounded-xl p-6 shadow-lg">
+                        <h3 class="text-slate-400 font-medium mb-1 text-sm">Estimated Revenue</h3>
+                        <p class="text-4xl font-black text-green-400">₹${bal.toLocaleString()}</p>
+                        <p class="text-slate-500 text-sm mt-2">10% Platform Fee on Withdrawal</p>
+                    </div>
+                </div>`;
+            } else if (activeTab === 'wallet') {
+                const bal = state.userData?.wallet || 0;
+                html += `
+                <div class="bg-slate-900 border border-slate-800 rounded-2xl p-6 max-w-3xl mx-auto shadow-xl">
+                    <div class="flex justify-between items-center mb-8 pb-8 border-b border-slate-800">
+                        <div><h2 class="text-2xl font-bold text-white">Creator Wallet</h2><p class="text-slate-400 text-sm">Available balance.</p></div>
+                        <div class="bg-slate-950 px-6 py-4 rounded-2xl text-center"><span class="text-4xl font-black text-green-400">₹${bal.toLocaleString()}</span></div>
+                    </div>
+                    <form onsubmit="handleWithdraw(event)">
+                        <div class="space-y-4">
+                            <input type="number" id="wd-amount" required placeholder="Amount (Min ₹1000)" max="${bal}" class="w-full bg-slate-950 border border-slate-800 rounded-lg p-3 text-white focus:border-green-500">
+                            
+                            <select id="wd-method" class="w-full bg-slate-950 border border-slate-800 rounded-lg p-3 text-white focus:border-green-500">
+                                <option value="Google Pay">Google Pay</option>
+                                <option value="PhonePe">PhonePe</option>
+                                <option value="UPI">UPI (Other)</option>
+                                <option value="Netbanking">Bank Transfer / Netbanking</option>
+                            </select>
+
+                            <input type="text" id="wd-details" required placeholder="Enter UPI ID / Mobile No / Account Details" class="w-full bg-slate-950 border border-slate-800 rounded-lg p-3 text-white focus:border-green-500">
+                            
+                            <button type="submit" class="w-full bg-green-600 hover:bg-green-700 text-white font-bold py-3 rounded-lg transition-colors">Request Payout</button>
+                        </div>
+                    </form>
+                </div>`;
+            }
+            html += `</div>`;
+            return html;
+        };
+
+        window.handleFileSelect = (e) => {
+            const file = e.target.files[0];
+            if(!file) return;
+            const baseName = file.name.replace(/\.[^/.]+$/, "");
+            document.getElementById('up-title').value = baseName;
+            
+            const generatedSlug = baseName.toLowerCase().replace(/[^a-z0-9]+/g, '-') + '-' + Math.floor(Math.random() * 1000);
+            const slugInput = document.getElementById('up-slug');
+            if (slugInput) {
+                slugInput.value = generatedSlug;
+                document.getElementById('slug-preview').innerText = generatedSlug;
+            }
+
+            const fileUrl = URL.createObjectURL(file);
+            document.getElementById('up-url').value = fileUrl;
+            state.tempVideoUrl = fileUrl;
+
+            // Thumbnail extraction
+            const video = document.createElement('video');
+            video.src = fileUrl;
+            video.currentTime = 1;
+            video.muted = true;
+            video.addEventListener('loadeddata', () => video.currentTime = 1);
+            video.addEventListener('seeked', () => {
+                const canvas = document.createElement('canvas');
+                canvas.width = 480; 
+                canvas.height = (video.videoHeight / video.videoWidth) * 480;
+                const ctx = canvas.getContext('2d');
+                ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+                state.tempThumb = canvas.toDataURL('image/jpeg', 0.7);
+                document.getElementById('up-thumb-preview').src = state.tempThumb;
+            });
+        };
+
+        window.publishVideo = async () => {
+            const title = document.getElementById('up-title').value;
+            const desc = document.getElementById('up-desc').value;
+            const cat = document.getElementById('up-cat').value;
+            const url = document.getElementById('up-url').value;
+            const slugInput = document.getElementById('up-slug').value;
+            const slug = slugInput || title.toLowerCase().replace(/[^a-z0-9]+/g, '-');
+            
+            if(!title || !url) { showToast("Title and URL required", "error"); return; }
+            
+            showToast("Publishing video...");
+            
+            const newVideo = {
+                id: isLocalMode ? 'local-' + Date.now() : null,
+                title, description: desc, category: cat,
+                url: url, slug: slug,
+                thumbnail: state.tempThumb || 'https://images.unsplash.com/photo-1616530940355-351fabd9524b?w=800&q=80',
+                creator: state.userData?.name || 'Anonymous Creator',
+                creatorId: state.user?.uid || 'local-admin-123',
+                views: 0, downloads: 0,
+                createdAt: new Date().toISOString()
+            };
+
+            if (isLocalMode) {
+                state.videos.unshift(newVideo);
+                showToast("Video published locally! (Offline Mode)", "success");
+                state.tempThumb = null;
+                setCreatorTab('content'); 
+            } else {
+                try {
+                    const videosRef = collection(db, 'artifacts', appId, 'public', 'data', 'videos');
+                    await addDoc(videosRef, newVideo);
+                    showToast("Uploaded successfully!");
+                    state.tempThumb = null;
+                    setCreatorTab('content');
+                } catch(e) { showToast("Upload failed", "error"); }
+            }
+        };
+
+        window.deleteVideo = (id) => {
+            showConfirm("Delete Video", "Are you sure you want to delete this video?", async () => {
+                if (isLocalMode) {
+                    state.videos = state.videos.filter(v => v.id !== id);
+                    showToast("Video deleted locally");
+                    render();
+                } else {
+                    await deleteDoc(doc(db, 'artifacts', appId, 'public', 'data', 'videos', id));
+                    showToast("Video deleted");
+                }
+            });
+        };
+
+        window.handleWithdraw = async (e) => {
+            e.preventDefault();
+            const amt = parseInt(document.getElementById('wd-amount').value);
+            const method = document.getElementById('wd-method').value;
+            const bal = state.userData?.wallet || 0;
+            if(amt < 1000 || amt > bal) { showToast("Invalid amount or insufficient balance", "error"); return; }
+            
+            const fee = amt * 0.10;
+            const finalAmt = amt - fee;
+            
+            if(!isLocalMode) {
+                const creatorRef = doc(db, 'artifacts', appId, 'public', 'data', 'profiles', state.user.uid);
+                await updateDoc(creatorRef, { wallet: increment(-amt) });
+                const platformRef = doc(db, 'artifacts', appId, 'public', 'data', 'platformStats', 'revenue');
+                await updateDoc(platformRef, { availableBalance: increment(fee), totalRevenue: increment(fee) });
+            }
+            
+            showToast(`Success! ₹${finalAmt} requested via ${method} (₹${fee} platform fee)`, "success");
+            if(isLocalMode) state.userData.wallet -= amt;
+            render();
+        };
+
+        let ctx, isDrawing = false, currentTool = 'pen';
+        window.initCanvas = () => {
+            const canvas = document.getElementById('thumbCanvas');
+            if(!canvas) return;
+            ctx = canvas.getContext('2d');
+            ctx.fillStyle = '#1e293b';
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+            
+            const start = (e) => {
+                isDrawing = true;
+                const pos = getPos(e, canvas);
+                ctx.beginPath();
+                ctx.moveTo(pos.x, pos.y);
+                if (e.type.startsWith('touch') && e.cancelable) e.preventDefault();
+            };
+            const draw = (e) => {
+                if(!isDrawing) return;
+                if (e.type.startsWith('touch') && e.cancelable) e.preventDefault();
+                const pos = getPos(e, canvas);
+                ctx.strokeStyle = currentTool === 'eraser' ? '#1e293b' : document.getElementById('canvas-color').value;
+                ctx.lineWidth = document.getElementById('canvas-size').value;
+                ctx.lineCap = 'round';
+                ctx.lineTo(pos.x, pos.y);
+                ctx.stroke();
+            };
+            const stop = () => { isDrawing = false; ctx.closePath(); };
+
+            canvas.addEventListener('mousedown', start);
+            canvas.addEventListener('mousemove', draw);
+            canvas.addEventListener('mouseup', stop);
+            canvas.addEventListener('mouseout', stop);
+            canvas.addEventListener('touchstart', start, {passive: false});
+            canvas.addEventListener('touchmove', draw, {passive: false});
+            canvas.addEventListener('touchend', stop);
+        };
+
+        const getPos = (e, canvas) => {
+            const rect = canvas.getBoundingClientRect();
+            const clientX = e.touches && e.touches.length > 0 ? e.touches[0].clientX : e.clientX;
+            const clientY = e.touches && e.touches.length > 0 ? e.touches[0].clientY : e.clientY;
+            return {
+                x: (clientX - rect.left) * (canvas.width / rect.width),
+                y: (clientY - rect.top) * (canvas.height / rect.height)
+            };
+        };
+        window.canvasSetTool = (tool) => { currentTool = tool; };
+        window.canvasClear = () => { ctx.fillStyle = '#1e293b'; ctx.fillRect(0, 0, 854, 480); };
+        window.canvasSave = () => {
+            const canvas = document.getElementById('thumbCanvas');
+            state.tempThumb = canvas.toDataURL('image/jpeg', 0.8);
+            showToast("Canvas saved to thumbnail!");
+            setCreatorTab('upload');
+        };
+
+        window.setAdminTab = (tab) => { state.adminTab = tab; render(); };
+        
+        const getAdminHTML = () => {
+            const tab = state.adminTab;
+            let html = `
+            <div class="max-w-7xl mx-auto p-4 sm:p-6 lg:p-8">
+                <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-8">
+                    <div class="flex items-center gap-3">
+                        <div class="bg-red-600 p-2 rounded-lg"><i class="fa-solid fa-gear text-white text-xl"></i></div>
+                        <div><h1 class="text-3xl font-black text-white">Admin Control Panel</h1><p class="text-red-400 text-sm">Owner (${ADMIN_NAME})</p></div>
+                    </div>
+                    <div class="flex bg-slate-900 rounded-lg p-1 border border-slate-800">
+                        <button onclick="setAdminTab('overview')" class="px-4 py-2 rounded-md text-sm font-medium transition-colors ${tab==='overview'?'bg-red-600 text-white':'text-slate-400'}">Overview</button>
+                        <button onclick="setAdminTab('manage')" class="px-4 py-2 rounded-md text-sm font-medium transition-colors ${tab==='manage'?'bg-red-600 text-white':'text-slate-400'}">Manage Videos</button>
+                    </div>
+                </div>`;
+
+            if (tab === 'overview') {
+                html += `
+                <div class="grid grid-cols-1 lg:grid-cols-3 gap-8">
+                    <div class="bg-slate-900 border border-slate-800 rounded-xl p-5 shadow-lg">
+                        <h3 class="text-slate-400 text-xs uppercase font-bold mb-1">Platform Revenue</h3>
+                        <p class="text-2xl font-black text-green-400">₹${(state.platformData?.totalRevenue||0).toLocaleString()}</p>
+                    </div>
+                    <div class="bg-slate-900 border border-slate-800 rounded-xl p-5 shadow-lg">
+                        <h3 class="text-slate-400 text-xs uppercase font-bold mb-1">Available Balance</h3>
+                        <p class="text-2xl font-black text-green-400">₹${(state.platformData?.availableBalance||0).toLocaleString()}</p>
+                    </div>
+                    <div class="bg-slate-900 border border-slate-800 rounded-xl p-5 shadow-lg">
+                        <h3 class="text-slate-400 text-xs uppercase font-bold mb-1">Total Videos</h3>
+                        <p class="text-2xl font-black text-white">${state.videos.length}</p>
+                    </div>
+                </div>
+                <div class="mt-8 bg-slate-900 border border-slate-800 rounded-2xl overflow-hidden shadow-xl max-w-md">
+                    <div class="bg-slate-950 p-4 border-b border-slate-800"><h3 class="font-bold text-white"><i class="fa-solid fa-building-columns text-green-500"></i> Withdraw Platform Profits</h3></div>
+                    <div class="p-4 space-y-4">
+                        <input type="number" id="admin-wd-amt" placeholder="Amount (Max: ₹${state.platformData?.availableBalance||0})" class="w-full bg-slate-950 border border-slate-800 rounded-lg p-3 text-white focus:border-green-500">
+                        
+                        <select id="admin-wd-method" class="w-full bg-slate-950 border border-slate-800 rounded-lg p-3 text-white focus:border-green-500">
+                            <option value="Google Pay">Google Pay</option>
+                            <option value="PhonePe">PhonePe</option>
+                            <option value="UPI">UPI (Other)</option>
+                            <option value="Netbanking">Bank Transfer / Netbanking</option>
+                        </select>
+
+                        <input type="text" id="admin-wd-details" placeholder="Account / UPI Details" class="w-full bg-slate-950 border border-slate-800 rounded-lg p-3 text-white focus:border-green-500">
+                        
+                        <button onclick="adminWithdraw()" class="w-full bg-green-600 hover:bg-green-700 text-white font-bold py-3 rounded-lg transition-colors">Transfer to Account</button>
+                    </div>
+                </div>`;
+            } else {
+                html += `<div class="grid grid-cols-1 md:grid-cols-2 gap-4">`;
+                state.videos.forEach(v => {
+                    html += `
+                    <div class="flex gap-4 items-center bg-slate-950 p-4 rounded-xl border border-slate-800">
+                        <img src="${v.thumbnail}" class="w-24 h-16 object-cover rounded-lg flex-shrink-0">
+                        <div class="flex-1 overflow-hidden">
+                            <h4 class="font-bold text-slate-200 truncate">${v.title}</h4>
+                            <p class="text-xs text-slate-500 mt-0.5">By: ${v.creator}</p>
+                        </div>
+                        <button onclick="deleteVideo('${v.id}')" class="p-2 bg-slate-800 hover:bg-red-600 text-slate-300 rounded-lg"><i class="fa-solid fa-trash"></i></button>
+                    </div>`;
+                });
+                if(state.videos.length === 0) html += `<p class="text-slate-500 col-span-2">No videos on platform.</p>`;
+                html += `</div>`;
+            }
+            html += `</div>`;
+            return html;
+        };
+
+        window.adminWithdraw = async () => {
+            const amt = parseInt(document.getElementById('admin-wd-amt').value);
+            const method = document.getElementById('admin-wd-method').value;
+            const details = document.getElementById('admin-wd-details').value;
+
+            if(!amt || amt > state.platformData.availableBalance || amt <= 0) { 
+                showToast("Invalid amount", "error"); 
+                return; 
+            }
+            if(!details.trim()) {
+                showToast("Please enter transfer details", "error");
+                return;
+            }
+
+            if(!isLocalMode) {
+                const platformRef = doc(db, 'artifacts', appId, 'public', 'data', 'platformStats', 'revenue');
+                await updateDoc(platformRef, { availableBalance: increment(-amt) });
+            } else {
+                state.platformData.availableBalance -= amt;
+            }
+            
+            showToast(`Transferred ₹${amt} to Owner via ${method}!`, "success");
+            render();
+        };
+
+        // Initialize App
+        initAuth();
+    </script>
+</body>
+</html>
